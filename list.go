@@ -4,7 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
 	"os/exec"
+	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 // ListAll collects the state of all devices present
@@ -22,6 +27,49 @@ func ListAll() ([]Device, error) {
 		return nil, err
 	}
 	return list[""], nil
+}
+
+func newRfkillDev() *rfkillDev {
+	return &rfkillDev{
+		Path: rfkillDevPath,
+	}
+}
+
+var (
+	rfkillDevPath = "/dev/rfkill"
+	rfkillSysPath = ""
+)
+
+type rfkillDev struct {
+	Path string
+	File *os.File
+}
+
+func (rd *rfkillDev) Open() error {
+	var err error
+	rd.File, err = os.OpenFile(rd.Path, os.O_RDONLY, os.FileMode(0664))
+	if err != nil {
+		return fmt.Errorf("failed to open %q: %s", rd.File, err)
+	}
+	ret, err := unix.FcntlInt(rd.File.Fd(), unix.F_SETFL, unix.O_RDONLY|unix.O_NONBLOCK)
+	if err != nil && err != syscall.Errno(0x0) {
+		return fmt.Errorf("failed to fcntl %q: %#V %s", rd.File, err, err)
+	}
+	if ret != 0 {
+		return fmt.Errorf("%q fcntl returned non-zero %d", rd.Path, ret)
+	}
+	return nil
+}
+
+func (rd *rfkillDev) Next() ([]byte, error) {
+	// err may be unix.EAGAIN which means done reading
+	buf := make([]byte, 8)
+	_, err := rd.File.Read(buf)
+	return buf, err
+}
+
+func (rd *rfkillDev) Close() error {
+	return rd.File.Close()
 }
 
 /*

@@ -15,3 +15,17 @@ func TestListAll(t *testing.T) {
 	}
 	fmt.Printf("%#v\n", devices)
 }
+
+func TestRfkillDev(t *testing.T) {
+	rd := newRfkillDev()
+	err := rd.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rd.Close()
+	buf, err := rd.Next()
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Printf("%#v\n", buf)
+}
