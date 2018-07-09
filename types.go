@@ -31,4 +31,10 @@ type Type string
 const (
 	BluetoothType Type = "bluetooth"
 	WlanType      Type = "wlan"
+	NfcType       Type = "nfc"
+	FmType        Type = "fm"
+	GpsType       Type = "gps"
+	UwbType       Type = "uwb"
+	WimaxType     Type = "wimax"
+	WwanType      Type = "wwan"
 )
