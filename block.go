@@ -1,38 +1,26 @@
 package rfkill
 
 import (
-	"bytes"
 	"errors"
-	"os/exec"
-	"strings"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 )
-
-var sanitaryChars = " ;&|"
 
 // Block device with ID of `id`
 func Block(id string) error {
-	if strings.Contains(id, sanitaryChars) {
-		return errors.New("unallowed characters in id")
+	name := filepath.Join(rfkillSysPath, "rfkill"+id, "soft")
+	if _, err := os.Stat(name); os.IsNotExist(err) {
+		return errors.New("index not found")
 	}
-	cmd := exec.Command("rfkill", "block", id)
-	var errOut bytes.Buffer
-	cmd.Stderr = &errOut
-	if err := cmd.Run(); err != nil {
-		return errors.New(errOut.String())
-	}
-	return nil
+	return ioutil.WriteFile(name, []byte(activeBlock), os.FileMode(0644))
 }
 
 // Unblock device with ID of `id`
 func Unblock(id string) error {
-	if strings.Contains(id, sanitaryChars) {
-		return errors.New("unallowed characters in id")
+	name := filepath.Join(rfkillSysPath, "rfkill"+id, "soft")
+	if _, err := os.Stat(name); os.IsNotExist(err) {
+		return errors.New("index not found")
 	}
-	cmd := exec.Command("rfkill", "unblock", id)
-	var errOut bytes.Buffer
-	cmd.Stderr = &errOut
-	if err := cmd.Run(); err != nil {
-		return errors.New(errOut.String())
-	}
-	return nil
+	return ioutil.WriteFile(name, []byte(inactiveBlock), os.FileMode(0644))
 }
