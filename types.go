@@ -9,6 +9,12 @@ type Device struct {
 	HardBlocked BlockState `json:"hard"`
 }
 
+// IsBlocked is convinience of comparing whether the device is either soft or
+// hard blocked.
+func (d Device) IsBlocked() bool {
+	return d.SoftBlocked == Blocked || d.HardBlocked == Blocked
+}
+
 // BlockState is the state of the type of block
 type BlockState string
 
