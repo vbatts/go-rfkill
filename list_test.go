@@ -23,9 +23,23 @@ func TestRfkillDev(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer rd.Close()
+	//for {
 	buf, err := rd.Next()
 	if err != nil {
 		t.Error(err)
+		//break
 	}
 	fmt.Printf("%#v\n", buf)
+	//}
+}
+
+func TestRfkillSysPaths(t *testing.T) {
+	matches, err := sysPaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) == 0 {
+		t.Errorf("expected more than 0 sys paths for rfkill devices")
+	}
+	fmt.Printf("%#v\n", matches)
 }

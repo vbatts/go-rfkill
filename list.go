@@ -1,12 +1,11 @@
 package rfkill
 
 import (
-	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
-	"os/exec"
+	"path/filepath"
+	"strings"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -14,19 +13,78 @@ import (
 
 // ListAll collects the state of all devices present
 func ListAll() ([]Device, error) {
-	cmd := exec.Command("rfkill", "--json")
-	var out bytes.Buffer
-	var errOut bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &errOut
-	if err := cmd.Run(); err != nil {
-		return nil, errors.New(errOut.String())
-	}
-	list := map[string][]Device{}
-	if err := json.Unmarshal(out.Bytes(), &list); err != nil {
+	matches, err := sysPaths()
+	if err != nil {
 		return nil, err
 	}
-	return list[""], nil
+	list := []Device{}
+	for _, match := range matches {
+		dev := Device{}
+		buf, err := ioutil.ReadFile(filepath.Join(match, "name"))
+		if err != nil {
+			return list, err
+		}
+		str := strings.Trim(string(buf), "\n")
+		dev.DeviceName = str
+
+		buf, err = ioutil.ReadFile(filepath.Join(match, "index"))
+		if err != nil {
+			return list, err
+		}
+		str = strings.Trim(string(buf), "\n")
+		dev.ID = str
+
+		buf, err = ioutil.ReadFile(filepath.Join(match, "type"))
+		if err != nil {
+			return list, err
+		}
+		str = strings.Trim(string(buf), "\n")
+		dev.Type = Type(str)
+
+		buf, err = ioutil.ReadFile(filepath.Join(match, "hard"))
+		if err != nil {
+			return list, err
+		}
+		str = strings.Trim(string(buf), "\n")
+		if str == activeBlock {
+			dev.HardBlocked = Blocked
+		} else {
+			dev.HardBlocked = Unblocked
+		}
+
+		buf, err = ioutil.ReadFile(filepath.Join(match, "soft"))
+		if err != nil {
+			return list, err
+		}
+		str = strings.Trim(string(buf), "\n")
+		if str == activeBlock {
+			dev.SoftBlocked = Blocked
+		} else {
+			dev.SoftBlocked = Unblocked
+		}
+
+		list = append(list, dev)
+	}
+	return list, nil
+}
+
+// from linux/Documentation/ABI/stable/sysfs-class-rfkill
+const (
+	inactiveBlock = "0"
+	activeBlock   = "1"
+)
+
+var (
+	rfkillDevPath = "/dev/rfkill"
+	rfkillSysPath = "/sys/class/rfkill/"
+)
+
+func sysPaths() ([]string, error) {
+	return filepath.Glob(filepath.Join(rfkillSysPath, "rfkill*"))
+	//matches, err := filepath.Glob(rfkillSysPath + "rfkill*")
+	//if err != nil {
+	//return nil, err
+	//}
 }
 
 func newRfkillDev() *rfkillDev {
@@ -35,25 +93,21 @@ func newRfkillDev() *rfkillDev {
 	}
 }
 
-var (
-	rfkillDevPath = "/dev/rfkill"
-	rfkillSysPath = ""
-)
-
 type rfkillDev struct {
 	Path string
 	File *os.File
 }
 
+// Open prepares the rfkill device for reading the event stream
 func (rd *rfkillDev) Open() error {
 	var err error
 	rd.File, err = os.OpenFile(rd.Path, os.O_RDONLY, os.FileMode(0664))
 	if err != nil {
-		return fmt.Errorf("failed to open %q: %s", rd.File, err)
+		return fmt.Errorf("failed to open %q: %s", rd.File.Name(), err)
 	}
 	ret, err := unix.FcntlInt(rd.File.Fd(), unix.F_SETFL, unix.O_RDONLY|unix.O_NONBLOCK)
 	if err != nil && err != syscall.Errno(0x0) {
-		return fmt.Errorf("failed to fcntl %q: %#V %s", rd.File, err, err)
+		return fmt.Errorf("failed to fcntl %q: %#v %s", rd.File.Name(), err, err)
 	}
 	if ret != 0 {
 		return fmt.Errorf("%q fcntl returned non-zero %d", rd.Path, ret)
@@ -61,8 +115,8 @@ func (rd *rfkillDev) Open() error {
 	return nil
 }
 
+// Next will continue to read events of changes to any device state (blocking)
 func (rd *rfkillDev) Next() ([]byte, error) {
-	// err may be unix.EAGAIN which means done reading
 	buf := make([]byte, 8)
 	_, err := rd.File.Read(buf)
 	return buf, err
