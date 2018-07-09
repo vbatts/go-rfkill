@@ -24,3 +24,13 @@ func Unblock(id string) error {
 	}
 	return ioutil.WriteFile(name, []byte(inactiveBlock), os.FileMode(0644))
 }
+
+// Block this device
+func (d Device) Block() error {
+	return Block(d.ID)
+}
+
+// Unblock this device
+func (d Device) Unblock() error {
+	return Unblock(d.ID)
+}
